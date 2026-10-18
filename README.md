@@ -64,6 +64,9 @@ The same binary converts without UI, which is handy for testing:
 - `Sources/FileFlip/App/`: hotkey, Finder selection, carousel panel and view, menu bar
 
 To add a format, add a case to `Op`, list it in `Catalog.targets(for:)` and handle it in `Converter.convert`.
+<img width="371" height="138" alt="Captura de Tela 2026-10-18 às 14 52 02" src="https://github.com/user-attachments/assets/67df87cf-d7e4-44e0-aa34-b1e540eea5ba" />
+<img width="570" height="217" alt="image" src="https://github.com/user-attachments/assets/0479e016-476c-45d6-a010-b87c646b9391" />
+
 
 ## License
 
