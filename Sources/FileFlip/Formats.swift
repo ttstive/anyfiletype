@@ -33,10 +33,32 @@ enum AudioFormat: String, CaseIterable, Hashable {
     case m4a, wav, aiff, caf
 }
 
+enum ResizeMode: Hashable {
+    /// Center crop to a square, then shrink to this many pixels per side.
+    case square(Int)
+    /// Longest side at most this many pixels.
+    case maxEdge(Int)
+    /// Both sides multiplied by this factor.
+    case scale(Double)
+    /// JPEG at or under this many bytes.
+    case maxBytes(Int)
+
+    /// Added to the output name, e.g. "photo 512x512.jpg".
+    var suffix: String {
+        switch self {
+        case .square(let n): return " \(n)x\(n)"
+        case .maxEdge(let n): return " \(n)px"
+        case .scale(let f): return " \(Int(f * 100))%"
+        case .maxBytes(let b): return " \(b / 1_000_000)MB"
+        }
+    }
+}
+
 /// One conversion the app knows how to run.
 enum Op: Hashable {
     case image(ImageFormat)
     case imageToPDF
+    case resize(ResizeMode)
     case pdfToImage(ImageFormat)
     case pdfToText
     case document(DocFormat)
@@ -44,6 +66,7 @@ enum Op: Hashable {
     case video(VideoFormat)
     case audioExtract
     case videoToGIF
+    case videoResize(Int)
     case audio(AudioFormat)
     case ffmpeg(String)
     case zip
@@ -115,6 +138,11 @@ enum Catalog {
                 }
             }
             add(.imageToPDF, "PDF", "Document", "doc.richtext")
+            add(.resize(.square(512)), "Square 512", "Profile picture", "person.crop.square")
+            add(.resize(.square(1080)), "Square 1080", "Square post", "crop")
+            add(.resize(.maxEdge(1920)), "1920 px", "Share size", "arrow.down.right.and.arrow.up.left")
+            add(.resize(.scale(0.5)), "50%", "Half size", "arrow.down.right.and.arrow.up.left")
+            add(.resize(.maxBytes(1_000_000)), "Under 1 MB", "Smaller file", "arrow.down.circle")
 
         case .pdf:
             add(.pdfToImage(.png), "PNG", "Pages as images", "photo.on.rectangle")
@@ -134,6 +162,8 @@ enum Catalog {
                 }
                 add(.videoToGIF, "GIF", "Animation", "photo.stack")
                 add(.audioExtract, "M4A", "Audio only", "waveform")
+                add(.videoResize(720), "720p", "Smaller video", "arrow.down.right.and.arrow.up.left")
+                add(.videoResize(540), "540p", "Smallest video", "arrow.down.right.and.arrow.up.left")
                 if ff {
                     add(.ffmpeg("webm"), "WEBM", "Video", "film")
                     add(.ffmpeg("mkv"), "MKV", "Video", "film")

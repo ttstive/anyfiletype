@@ -13,7 +13,7 @@ extension VideoFormat {
 }
 
 enum MediaConv {
-    static func export(_ url: URL, preset: String, type: AVFileType, ext: String) async throws -> URL {
+    static func export(_ url: URL, preset: String, type: AVFileType, ext: String, suffix: String = "") async throws -> URL {
         let asset = AVURLAsset(url: url)
         if preset == AVAssetExportPresetAppleM4A,
            (try? await asset.loadTracks(withMediaType: .audio).isEmpty) ?? false {
@@ -22,7 +22,7 @@ enum MediaConv {
         guard let session = AVAssetExportSession(asset: asset, presetName: preset) else {
             throw ConvertError.unreadable(url.lastPathComponent)
         }
-        let out = OutputPath.file(for: url, ext: ext)
+        let out = OutputPath.file(for: url, ext: ext, suffix: suffix)
         session.outputURL = out
         session.outputFileType = type
         session.shouldOptimizeForNetworkUse = true
@@ -32,6 +32,28 @@ enum MediaConv {
         guard session.status == .completed else {
             try? FileManager.default.removeItem(at: out)
             throw ConvertError.failed(session.error?.localizedDescription ?? "Export failed.")
+        }
+        return out
+    }
+
+    /// Smaller MP4 (720p or 540p). Refuses when it wouldn't actually save space.
+    static func shrink(_ url: URL, to height: Int) async throws -> URL {
+        let asset = AVURLAsset(url: url)
+        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+            throw ConvertError.unreadable(url.lastPathComponent)
+        }
+        let (natural, transform) = try await track.load(.naturalSize, .preferredTransform)
+        let shown = natural.applying(transform)
+        if min(abs(shown.width), abs(shown.height)) <= CGFloat(height) {
+            throw ConvertError.failed("\(url.lastPathComponent) is already \(height)p or smaller.")
+        }
+        let preset = height >= 720 ? AVAssetExportPreset1280x720 : AVAssetExportPreset960x540
+        let out = try await export(url, preset: preset, type: .mp4, ext: "mp4", suffix: " \(height)p")
+        let before = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? .max
+        let after = (try? out.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        if after >= before {
+            try? FileManager.default.removeItem(at: out)
+            throw ConvertError.failed("\(url.lastPathComponent) is already as small as \(height)p gets.")
         }
         return out
     }

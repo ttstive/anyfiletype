@@ -41,12 +41,24 @@ Why ⌃⌥T and not ⌘T: ⌘T opens a new tab in nearly every app, and ⌥⌘T 
 | DOCX, DOC, RTF, ODT, HTML, TXT, Markdown | PDF, DOCX, RTF, ODT, HTML, TXT, DOC | AppKit text system |
 | MOV, MP4, M4V | MP4, MOV, M4V, GIF, M4A (audio) | AVFoundation |
 | M4A, MP3, WAV, AIFF, CAF, AAC, FLAC | M4A, WAV, AIFF, CAF | AVFoundation |
+| Images | Square 512 (profile picture), Square 1080, 1920 px, 50%, Under 1 MB | CoreGraphics |
+| MOV, MP4, M4V | 720p, 540p (smaller video) | AVFoundation |
 | Any file or folder | ZIP | ditto / zip |
 | ZIP | Extract | ditto |
 
 With [FFmpeg](https://ffmpeg.org) installed (`brew install ffmpeg`), you also get WebP output, WebM/MKV video, MP3/FLAC/OGG audio, and input from MKV, WebM, AVI, OGG and similar files. Restart FileFlip after installing it.
 
 Selecting several files shows only the formats that all of them support.
+
+### Resizing
+
+Resized copies are saved next to the original with the size in the name, e.g. `photo 512x512.jpg`.
+
+- **Square 512 / Square 1080** crop the center of the photo to a square, which works for profile pictures in most apps.
+- **1920 px** limits the longest side, and **50%** halves both sides.
+- **Under 1 MB** lowers JPEG quality, then size, until the file fits upload limits.
+- PNGs stay PNG so transparency is kept (except Under 1 MB, which is always JPG). Other images become JPG, which every app accepts.
+- Images are never enlarged. Videos already at or below 720p/540p are left alone with a message.
 
 ## Command line
 

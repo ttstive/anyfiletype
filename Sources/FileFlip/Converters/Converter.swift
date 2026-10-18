@@ -32,6 +32,7 @@ enum Converter {
         switch op {
         case .image(let f): return [try ImageConv.convert(url, to: f)]
         case .imageToPDF: return [try ImageConv.toPDF(url)]
+        case .resize(let mode): return [try ImageConv.resize(url, mode)]
         case .pdfToImage(let f): return try PDFConv.toImages(url, format: f)
         case .pdfToText: return [try PDFConv.toText(url)]
         case .document(let f): return [try await DocConv.convert(url, to: f)]
@@ -41,6 +42,7 @@ enum Converter {
         case .audioExtract:
             return [try await MediaConv.export(url, preset: AVAssetExportPresetAppleM4A, type: .m4a, ext: "m4a")]
         case .videoToGIF: return [try await MediaConv.gif(url)]
+        case .videoResize(let height): return [try await MediaConv.shrink(url, to: height)]
         case .audio(let f):
             if f == .m4a {
                 return [try await MediaConv.export(url, preset: AVAssetExportPresetAppleM4A, type: .m4a, ext: "m4a")]
@@ -55,9 +57,9 @@ enum Converter {
 
 /// Picks output names next to the original. Never overwrites anything.
 enum OutputPath {
-    static func file(for source: URL, ext: String) -> URL {
+    static func file(for source: URL, ext: String, suffix: String = "") -> URL {
         let dir = source.deletingLastPathComponent()
-        let base = source.deletingPathExtension().lastPathComponent
+        let base = source.deletingPathExtension().lastPathComponent + suffix
         var candidate = dir.appendingPathComponent(base).appendingPathExtension(ext)
         var n = 2
         while FileManager.default.fileExists(atPath: candidate.path) {

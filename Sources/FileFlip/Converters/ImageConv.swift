@@ -40,6 +40,96 @@ enum ImageConv {
         }
     }
 
+    /// Resized copy next to the original. PNGs stay PNG (keeps transparency); everything else becomes JPG,
+    /// which every app accepts for uploads. Images are never enlarged.
+    static func resize(_ url: URL, _ mode: ResizeMode) throws -> URL {
+        let source = try loadOriented(url)
+        let w = CGFloat(source.width), h = CGFloat(source.height)
+        let keepPNG = Catalog.ext(url) == "png" && !isMaxBytes(mode)
+        let format: ImageFormat = keepPNG ? .png : .jpeg
+        let out = OutputPath.file(for: url, ext: format.ext, suffix: mode.suffix)
+
+        return try OutputPath.producing(out) {
+            switch mode {
+            case .square(let n):
+                let side = min(w, h)
+                let crop = CGRect(x: ((w - side) / 2).rounded(.down), y: ((h - side) / 2).rounded(.down),
+                                  width: side, height: side)
+                let target = min(CGFloat(n), side)
+                let image = try draw(source, crop: crop, size: CGSize(width: target, height: target), opaque: !keepPNG)
+                try write(image, to: out, type: format.type, properties: quality(0.9, format))
+
+            case .maxEdge(let n):
+                let factor = min(1, CGFloat(n) / max(w, h))
+                let image = try draw(source, crop: nil, size: CGSize(width: w * factor, height: h * factor), opaque: !keepPNG)
+                try write(image, to: out, type: format.type, properties: quality(0.9, format))
+
+            case .scale(let f):
+                let factor = min(1, CGFloat(f))
+                let image = try draw(source, crop: nil, size: CGSize(width: w * factor, height: h * factor), opaque: !keepPNG)
+                try write(image, to: out, type: format.type, properties: quality(0.9, format))
+
+            case .maxBytes(let limit):
+                try jpeg(from: source, under: limit).write(to: out)
+            }
+            return out
+        }
+    }
+
+    private static func isMaxBytes(_ mode: ResizeMode) -> Bool {
+        if case .maxBytes = mode { return true }
+        return false
+    }
+
+    private static func quality(_ q: Double, _ f: ImageFormat) -> [String: Any] {
+        f == .jpeg ? [kCGImageDestinationLossyCompressionQuality as String: q] : [:]
+    }
+
+    /// Lowers JPEG quality, then size, until the file fits.
+    private static func jpeg(from source: CGImage, under limit: Int) throws -> Data {
+        var image = try draw(source, crop: nil, size: CGSize(width: source.width, height: source.height), opaque: true)
+        for _ in 0..<12 {
+            for q in [0.85, 0.75, 0.65, 0.55] {
+                let data = try encode(image, quality: q)
+                if data.count <= limit { return data }
+            }
+            let size = CGSize(width: CGFloat(image.width) * 0.8, height: CGFloat(image.height) * 0.8)
+            guard size.width >= 16, size.height >= 16 else { break }
+            image = try draw(image, crop: nil, size: size, opaque: true)
+        }
+        throw ConvertError.failed("Couldn't get the image under \(limit / 1_000_000) MB.")
+    }
+
+    private static func encode(_ image: CGImage, quality: Double) throws -> Data {
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else {
+            throw ConvertError.failed("Couldn't encode the image.")
+        }
+        CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality as String: quality] as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { throw ConvertError.failed("Couldn't encode the image.") }
+        return data as Data
+    }
+
+    /// High-quality crop and scale. Opaque output gets a white background.
+    private static func draw(_ image: CGImage, crop: CGRect?, size: CGSize, opaque: Bool) throws -> CGImage {
+        let source = crop.flatMap { image.cropping(to: $0) } ?? image
+        let width = max(1, Int(size.width.rounded())), height = max(1, Int(size.height.rounded()))
+        let info = opaque ? CGImageAlphaInfo.noneSkipLast.rawValue : CGImageAlphaInfo.premultipliedLast.rawValue
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: space, bitmapInfo: info)
+        else { throw ConvertError.failed("Couldn't resize the image.") }
+        let rect = CGRect(x: 0, y: 0, width: width, height: height)
+        if opaque {
+            ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+            ctx.fill(rect)
+        }
+        ctx.interpolationQuality = .high
+        ctx.draw(source, in: rect)
+        guard let result = ctx.makeImage() else { throw ConvertError.failed("Couldn't resize the image.") }
+        return result
+    }
+
     static func write(_ image: CGImage, to out: URL, type: UTType, properties: [String: Any] = [:]) throws {
         guard let dest = CGImageDestinationCreateWithURL(out as CFURL, type.identifier as CFString, 1, nil) else {
             throw ConvertError.failed("This Mac can't write \(type.preferredFilenameExtension ?? "that format").")
