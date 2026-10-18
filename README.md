@@ -9,7 +9,7 @@ Inspired by [Filee](https://github.com/KnifeLemon/Filee), built from scratch in 
 Needs macOS 14+ and the Swift toolchain (Xcode Command Line Tools are enough).
 
 ```sh
-./scripts/build-app.sh --install   # builds, copies to ~/Applications and launches
+./scripts/build-app.sh --install   # builds, copies to /Applications and launches
 ```
 
 The first time you press ⌃⌥T in Finder, macOS asks whether FileFlip may control Finder. Allow it, because that's how the app reads your selection. If you pressed "Don't Allow", turn it back on in System Settings → Privacy & Security → Automation.
@@ -18,6 +18,12 @@ Turn on **Open at Login** from the menu bar icon to keep it running.
 
 ## Using it
 
+Three ways to open it:
+
+- **Shortcut:** select files in Finder and press ⌃⌥T.
+- **Click the app** in Spotlight, Launchpad or the Dock: a file picker opens.
+- **Drag files onto the app icon** (keep it in the Dock for this): the carousel opens with those files.
+
 | Action | Key |
 |---|---|
 | Open the carousel (Finder in front) | ⌃⌥T |
@@ -25,10 +31,10 @@ Turn on **Open at Login** from the menu bar icon to keep it running.
 | Move | ← → / ↑ ↓ / Tab, trackpad swipe, mouse wheel |
 | Jump to a format | type its name (e.g. `pd` for PDF) |
 | Convert | Return, Space or click the selected card |
-| After converting | Return shows the file in Finder |
-| Close | Esc or click elsewhere |
+| After converting | The panel stays open with the file name and folder. Return or **Show in Finder** reveals it |
+| Close | Esc or **Close**. Clicking elsewhere closes it only while you're still picking a format |
 
-The carousel remembers the last format you picked for each kind of file.
+The carousel remembers the last format you picked for each kind of file. Your last 10 converted files are listed under **Recent Conversions** in the menu bar icon; pick one to show it in Finder.
 
 Why ⌃⌥T and not ⌘T: ⌘T opens a new tab in nearly every app, and ⌥⌘T hides the toolbar in Finder.
 

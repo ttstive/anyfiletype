@@ -3,13 +3,15 @@ import Carbon.HIToolbox
 import ServiceManagement
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var hotKey: HotKey?
     private var panel: CarouselPanel?
+    private let recentMenu = NSMenu()
     private let launchItem = NSMenuItem(title: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
 
     static let shortcutLabel = "⌃⌥T"
+    private var openedWithFiles = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setUpMenuBar()
@@ -20,6 +22,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert("\(Self.shortcutLabel) is already taken",
                   "Another app registered this shortcut. You can still use FileFlip from the menu bar.")
         }
+        // Opened by hand (Spotlight, Launchpad, Dock): show the file picker right away.
+        // Stay quiet when started at login or when files were dropped on the icon.
+        if !openedWithFiles && !launchedAtLogin {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.openedWithFiles else { return }
+                self.chooseFiles()
+            }
+        }
+    }
+
+    /// Clicking the app again while it's running.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        chooseFiles()
+        return false
+    }
+
+    /// Files dropped on the app icon (Dock or Finder), or "Open With → FileFlip".
+    func application(_ application: NSApplication, open urls: [URL]) {
+        openedWithFiles = true
+        let files = urls.filter(\.isFileURL)
+        if !files.isEmpty { show(files) }
+    }
+
+    private var launchedAtLogin: Bool {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        return event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
     }
 
     private func setUpMenuBar() {
@@ -31,6 +59,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         convert.keyEquivalentModifierMask = [.control, .option]
         menu.addItem(convert)
         menu.addItem(NSMenuItem(title: "Choose Files…", action: #selector(chooseFiles), keyEquivalent: ""))
+        menu.addItem(.separator())
+        let recent = NSMenuItem(title: "Recent Conversions", action: nil, keyEquivalent: "")
+        recent.submenu = recentMenu
+        recentMenu.delegate = self
+        menu.addItem(recent)
         menu.addItem(.separator())
         let ffmpeg = NSMenuItem(title: FFmpeg.isAvailable ? "FFmpeg: installed (extra formats on)"
                                                          : "FFmpeg: not installed (brew install ffmpeg)",
@@ -46,6 +79,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         item.menu = menu
         statusItem = item
+    }
+
+    /// Rebuilt each time it opens, so deleted files drop off the list.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === recentMenu else { return }
+        menu.removeAllItems()
+        let recents = Recents.all
+        if recents.isEmpty {
+            let empty = NSMenuItem(title: "Nothing yet", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+            return
+        }
+        for url in recents {
+            let item = NSMenuItem(title: url.lastPathComponent, action: #selector(revealRecent(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = url
+            item.toolTip = url.path
+            let icon = NSWorkspace.shared.icon(forFile: url.path)
+            icon.size = NSSize(width: 16, height: 16)
+            item.image = icon
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let clear = NSMenuItem(title: "Clear List", action: #selector(clearRecents), keyEquivalent: "")
+        clear.target = self
+        menu.addItem(clear)
+    }
+
+    @objc private func revealRecent(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    @objc private func clearRecents() {
+        Recents.clear()
     }
 
     /// Shortcut pressed: convert the Finder selection, or ask for files when Finder isn't in front.

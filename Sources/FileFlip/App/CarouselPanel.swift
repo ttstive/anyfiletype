@@ -61,11 +61,11 @@ final class CarouselPanel: NSPanel {
         onClose()
     }
 
-    /// Clicking anywhere else closes the carousel, unless a conversion is running.
+    /// Clicking elsewhere closes the carousel only while picking a format.
+    /// Once a conversion starts, it stays until you choose Show in Finder or Close.
     override func resignKey() {
         super.resignKey()
-        if case .working = model.state { return }
-        dismiss()
+        if model.state == .choosing { dismiss() }
     }
 
     private func handle(_ event: NSEvent) -> Bool {

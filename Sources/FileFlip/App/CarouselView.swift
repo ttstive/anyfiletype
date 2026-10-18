@@ -7,12 +7,19 @@ struct CarouselView: View {
     var body: some View {
         VStack(spacing: 18) {
             header
-            if model.targets.isEmpty {
-                Text("No conversions for this selection")
-                    .foregroundStyle(.secondary)
-                    .frame(height: 150)
-            } else {
-                carousel
+            switch model.state {
+            case .done(let outputs):
+                ResultView(outputs: outputs, model: model)
+            case .failed(let message):
+                FailureView(message: message, model: model)
+            case .choosing, .working:
+                if model.targets.isEmpty {
+                    Text("No conversions for this selection")
+                        .foregroundStyle(.secondary)
+                        .frame(height: 150)
+                } else {
+                    carousel
+                }
             }
             footer
         }
@@ -96,23 +103,106 @@ struct CarouselView: View {
                     ProgressView().controlSize(.small)
                     Text("Converting to \(title)…")
                 }
-            case .done(let outputs):
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                    Text(outputs.count == 1 ? "Saved \(outputs[0].lastPathComponent)" : "Saved \(outputs.count) files")
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text("·  ↩ show in Finder").foregroundStyle(.secondary)
-                }
-            case .failed(let message):
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Text(message).lineLimit(3)
-                }
+            case .done:
+                Text("↩  show in Finder   ·   esc  close")
+                    .foregroundStyle(.secondary)
+            case .failed:
+                Text("esc  close")
+                    .foregroundStyle(.secondary)
             }
         }
         .font(.system(size: 12))
         .frame(height: 34)
+    }
+}
+
+/// After converting: what was saved, where, and what to do next.
+struct ResultView: View {
+    let outputs: [URL]
+    @ObservedObject var model: CarouselModel
+
+    private var folder: URL { outputs[0].deletingLastPathComponent() }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(outputs.count == 1 ? "Saved \(outputs[0].lastPathComponent)" : "Saved \(outputs.count) files")
+                        .font(.system(size: 15, weight: .semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if outputs.count > 1 {
+                        Text(outputs.prefix(3).map(\.lastPathComponent).joined(separator: ", ")
+                             + (outputs.count > 3 ? " + \(outputs.count - 3) more" : ""))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: folder.path))
+                    .resizable()
+                    .frame(width: 18, height: 18)
+                Text((folder.path as NSString).abbreviatingWithTildeInPath)
+                    .font(.system(size: 12, design: .monospaced))
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .textSelection(.enabled)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.06)))
+            .help(folder.path)
+
+            HStack {
+                Spacer()
+                Button("Close") { model.close() }
+                    .controlSize(.large)
+                Button("Show in Finder") { model.revealOutputs() }
+                    .controlSize(.large)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .frame(height: 150)
+    }
+}
+
+struct FailureView: View {
+    let message: String
+    @ObservedObject var model: CarouselModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Couldn't convert")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(message)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(4)
+                        .textSelection(.enabled)
+                }
+            }
+            Spacer(minLength: 0)
+            HStack {
+                Spacer()
+                Button("Close") { model.close() }
+                    .controlSize(.large)
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .frame(height: 150)
     }
 }
 

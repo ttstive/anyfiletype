@@ -50,12 +50,16 @@ final class CarouselModel: ObservableObject {
     func confirm() {
         switch state {
         case .choosing: start()
-        case .done(let outputs):
-            NSWorkspace.shared.activateFileViewerSelecting(outputs)
-            close()
+        case .done: revealOutputs()
         case .failed: close()
         case .working: break
         }
+    }
+
+    func revealOutputs() {
+        guard case .done(let outputs) = state else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(outputs)
+        close()
     }
 
     private func start() {
@@ -65,12 +69,34 @@ final class CarouselModel: ObservableObject {
         Task {
             do {
                 let outputs = try await Converter.run(target.op, files: files)
+                Recents.add(outputs)
                 state = .done(outputs)
-                try? await Task.sleep(for: .seconds(2))
-                if case .done = state { close() }
             } catch {
                 state = .failed(error.localizedDescription)
             }
         }
+    }
+}
+
+/// The last conversions, newest first, for the menu bar's Recent list.
+enum Recents {
+    private static let key = "recentOutputs"
+    private static let limit = 10
+
+    static var all: [URL] {
+        (UserDefaults.standard.stringArray(forKey: key) ?? [])
+            .map { URL(fileURLWithPath: $0) }
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    static func add(_ urls: [URL]) {
+        let paths = urls.map(\.path) + (UserDefaults.standard.stringArray(forKey: key) ?? [])
+        var seen = Set<String>()
+        let unique = paths.filter { seen.insert($0).inserted }
+        UserDefaults.standard.set(Array(unique.prefix(limit)), forKey: key)
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
     }
 }
